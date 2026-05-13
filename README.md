@@ -2,11 +2,13 @@
 
 Ferramentas Git para apoiar o fluxo de correcao de branches dos projetos GW.
 
-## Comando disponivel
+Este repositorio disponibiliza o comando:
 
-### `git bizu-fix`
+```bash
+git bizu-fix
+```
 
-Recria uma branch de story a partir da sua branch base atualizada e reaplica somente os commits da story.
+O comando recria uma branch de story a partir da branch base atualizada e reaplica somente os commits da story.
 
 Exemplo:
 
@@ -14,101 +16,186 @@ Exemplo:
 git bizu-fix gweb-saas-fix-5901
 ```
 
+## Quando usar
+
+Use o `git bizu-fix` quando uma branch de story precisar ser refeita em cima da base mais recente.
+
+O script faz backup local da branch atual, atualiza a base pelo `origin`, reseta a branch da story para essa base e reaplica os commits da story usando `git cherry-pick`.
+
+## Requisitos
+
+Antes de instalar, confirme que sua maquina possui:
+
+- Git instalado;
+- acesso ao GitHub;
+- terminal Bash ou Zsh;
+- permissao para criar arquivos em `~/bin`.
+
 ## Instalacao
 
-Clone este repositorio:
+### 1. Clone este repositorio
+
+Entre na pasta onde voce costuma guardar seus projetos:
 
 ```bash
-git clone https://github.com/Danilo-tec-2003/git-bizu-fix.git
+cd ~/Documentos/Projetos
 ```
 
-Garanta permissao de execucao:
+Clone o repositorio:
 
 ```bash
-chmod +x ~/gw-dev-tools/git-bizu-fix
+git clone https://github.com/Danilo-tec-2003/gw-bizu-fix.git
 ```
 
-Crie uma pasta local para comandos, caso ainda nao exista:
+Entre na pasta criada:
+
+```bash
+cd ~/Documentos/Projetos/gw-bizu-fix
+```
+
+### 2. De permissao de execucao ao script
+
+```bash
+chmod +x git-bizu-fix
+```
+
+### 3. Crie a pasta local de comandos
 
 ```bash
 mkdir -p ~/bin
 ```
 
-Crie o link do comando:
+### 4. Crie o link do comando
 
 ```bash
-ln -sf ~/gw-dev-tools/git-bizu-fix ~/bin/git-bizu-fix
+ln -sf ~/Documentos/Projetos/gw-bizu-fix/git-bizu-fix ~/bin/git-bizu-fix
 ```
 
-Garanta que `~/bin` esteja no `PATH`.
+Esse link permite chamar o script como um comando Git:
 
-Bash:
+```bash
+git bizu-fix
+```
+
+O Git reconhece executaveis chamados `git-alguma-coisa` como comandos no formato `git alguma-coisa`, desde que estejam no `PATH`.
+
+### 5. Adicione `~/bin` ao PATH
+
+Primeiro, veja qual shell voce usa:
+
+```bash
+echo $SHELL
+```
+
+Se o resultado for `/bin/bash`, rode:
 
 ```bash
 echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-Zsh:
+Se o resultado for `/bin/zsh`, rode:
 
 ```bash
 echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-Valide:
+### 6. Valide a instalacao
+
+Rode:
 
 ```bash
 git bizu-fix
 ```
 
-Se estiver instalado corretamente, o comando deve mostrar a mensagem de uso.
+Se estiver instalado corretamente, o terminal deve mostrar a mensagem de uso:
+
+```text
+Uso:
+  git bizu-fix <branch>
+```
+
+Exemplo de instalacao validada:
+
+![Instalacao do git bizu-fix](docs/images/sigaGit.png)
 
 ## Como usar
 
-Entre no repositorio do projeto:
+### 1. Entre no repositorio do projeto
+
+Exemplo para o projeto `gweb`:
 
 ```bash
-cd ~/Projetos/gweb
+cd ~/Documentos/Projetos/gweb
 ```
 
-Garanta que a branch da story existe localmente:
+### 2. Confira se a branch da story existe localmente
 
 ```bash
 git branch --list gweb-saas-fix-5901
 ```
 
-Execute:
+Se o comando nao mostrar nada, traga a branch do remoto antes de continuar:
+
+```bash
+git fetch origin
+git checkout gweb-saas-fix-5901
+```
+
+### 3. Confirme que nao existem alteracoes locais pendentes
+
+```bash
+git status
+```
+
+O script nao executa se houver arquivos alterados, arquivos staged, merge, rebase, cherry-pick ou revert em andamento.
+
+### 4. Execute o comando
 
 ```bash
 git bizu-fix gweb-saas-fix-5901
 ```
 
-O script vai mostrar o projeto, a branch de trabalho, a branch base detectada e o numero da story.
+O script vai mostrar:
 
-Antes de alterar a branch, ele pede confirmacao digitando o nome completo da branch:
+- repositorio detectado;
+- branch de trabalho;
+- branch base detectada;
+- numero da story.
+
+Antes de alterar a branch, ele pede confirmacao:
 
 ```text
 Para confirmar, digite o nome da branch:
 ```
 
-Exemplo:
+Digite o nome completo da branch:
 
 ```text
 gweb-saas-fix-5901
 ```
 
-Ao final, revise a branch e envie para o remoto:
+### 5. Revise e envie a branch para o remoto
+
+Depois que o script terminar, revise o resultado:
+
+```bash
+git status
+git log --oneline --decorate -10
+```
+
+Se estiver tudo certo, envie a branch:
 
 ```bash
 git push origin gweb-saas-fix-5901 --force-with-lease
 ```
 
-A branch que deve ir para o PR e sempre a branch original da story, nao a branch de backup.
+A branch que deve ir para o PR e sempre a branch original da story, nunca a branch de backup.
 
 ## Projetos suportados
 
-| Projeto | Padrao aceito | Base detectada |
+| Projeto | Padrao da branch de story | Branch base detectada |
 | --- | --- | --- |
 | `gweb` | `gweb-qualquer-coisa-5901` | `gweb-qualquer-coisa` |
 | `webtrans` | `webtrans-qualquer-coisa-5901` | `webtrans-qualquer-coisa` |
@@ -127,32 +214,46 @@ git bizu-fix gw-lib-fix-5901
 
 ## Regra dos commits
 
-Os commits da story precisam comecar com o numero da story entre parenteses:
+Os commits da story precisam comecar com o numero da story entre parenteses.
+
+Exemplo correto:
 
 ```text
 (5901)fix: ajusta validacao de frete
 ```
 
-O script so reaplica commits encontrados no backup com esse padrao:
+O script procura commits no backup usando o numero final da branch.
+
+Para a branch:
 
 ```text
-^(5901)
+gweb-saas-fix-5901
 ```
+
+ele reaplica somente commits que comecam com:
+
+```text
+(5901)
+```
+
+Se nenhum commit seguir esse padrao, o script nao consegue identificar o que deve ser reaplicado.
 
 ## O que o script faz
 
-1. Valida o projeto e o nome da branch.
-2. Identifica o numero da story pelo final da branch.
-3. Detecta a branch base removendo o numero final.
-4. Bloqueia execucao se houver merge, rebase, cherry-pick ou revert em andamento.
-5. Bloqueia execucao se houver alteracoes locais nao commitadas.
-6. Verifica backups antigos e oferece limpeza assistida.
-7. Pede confirmacao digitando o nome da branch.
-8. Cria uma branch local de backup.
-9. Atualiza a base local a partir do `origin`.
-10. Reseta a branch da story para a base atualizada.
-11. Reaplica os commits da story com `git cherry-pick`.
-12. Orienta o push final com `--force-with-lease`.
+1. Valida se o diretorio atual esta dentro de um repositorio Git.
+2. Valida se o repositorio e suportado.
+3. Valida o nome da branch informada.
+4. Identifica o numero da story pelo final da branch.
+5. Detecta a branch base removendo o numero final.
+6. Bloqueia a execucao se houver merge, rebase, cherry-pick ou revert em andamento.
+7. Bloqueia a execucao se houver alteracoes locais nao commitadas.
+8. Verifica backups antigos e oferece limpeza assistida.
+9. Pede confirmacao digitando o nome completo da branch.
+10. Cria uma branch local de backup.
+11. Atualiza a branch base local a partir do `origin`.
+12. Reseta a branch da story para a base atualizada.
+13. Reaplica os commits da story com `git cherry-pick`.
+14. Orienta o push final com `--force-with-lease`.
 
 ## Branch de backup
 
@@ -191,7 +292,7 @@ Para remover esses backups, digite DELETE.
 Para manter, pressione Enter:
 ```
 
-A limpeza so acontece se o dev digitar exatamente:
+A limpeza so acontece se voce digitar exatamente:
 
 ```text
 DELETE
@@ -199,15 +300,15 @@ DELETE
 
 Se pressionar Enter ou digitar qualquer outra coisa, os backups sao mantidos.
 
-## Conflitos
+## Conflitos durante o cherry-pick
 
-Se algum `cherry-pick` gerar conflito, o script para imediatamente e deixa a resolucao para o dev.
+Se algum `cherry-pick` gerar conflito, o script para imediatamente e deixa a resolucao para o desenvolvedor.
 
 Fluxo recomendado:
 
 ```bash
 git status
-# resolver os conflitos nos arquivos
+# resolva os conflitos nos arquivos
 git add <arquivos-resolvidos>
 git cherry-pick --continue
 ```
@@ -232,5 +333,65 @@ O script nao executa se encontrar:
 - branch fora do padrao do projeto;
 - repositorio nao suportado.
 
-Resolva a situacao indicada e execute novamente.
+Resolva a situacao indicada no terminal e execute o comando novamente.
 
+## Solucao rapida de problemas
+
+### `git: 'bizu-fix' is not a git command`
+
+O comando nao esta no `PATH`.
+
+Confira se o link existe:
+
+```bash
+ls -l ~/bin/git-bizu-fix
+```
+
+Confira se `~/bin` esta no `PATH`:
+
+```bash
+echo $PATH
+```
+
+Depois rode novamente o passo de configuracao do shell, conforme Bash ou Zsh.
+
+### `[erro] Informe o nome completo da branch.`
+
+O comando foi chamado sem informar a branch.
+
+Use:
+
+```bash
+git bizu-fix nome-da-branch
+```
+
+Exemplo:
+
+```bash
+git bizu-fix gweb-saas-fix-5901
+```
+
+### `[erro] A branch '...' nao existe localmente.`
+
+Traga a branch do remoto:
+
+```bash
+git fetch origin
+git checkout nome-da-branch
+```
+
+Depois execute novamente:
+
+```bash
+git bizu-fix nome-da-branch
+```
+
+### `[erro] Nenhum commit encontrado com o padrao (...)`
+
+Os commits da story nao comecam com o numero da story entre parenteses.
+
+Exemplo esperado:
+
+```text
+(5901)fix: ajusta validacao de frete
+```
