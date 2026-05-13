@@ -1,0 +1,339 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+BACKUP_RETENTION_DAYS=30
+SECONDS_PER_DAY=86400
+
+fail() {
+  echo ""
+  echo "[erro] $1"
+  echo ""
+  exit 1
+}
+
+usage() {
+  echo "Uso:"
+  echo "  git bizu-fix <branch>"
+  echo ""
+  echo "Exemplos:"
+  echo "  git bizu-fix gweb-saas-fix-5901"
+  echo "  git bizu-fix gweb-saas-elastic-5901"
+  echo "  git bizu-fix webtrans-saas-fix-5901"
+  echo "  git bizu-fix master-5901"
+  echo "  git bizu-fix gw-lib-fix-5901"
+}
+
+ensure_no_git_operation_in_progress() {
+  merge_head="$(git rev-parse --git-path MERGE_HEAD)"
+  cherry_pick_head="$(git rev-parse --git-path CHERRY_PICK_HEAD)"
+  revert_head="$(git rev-parse --git-path REVERT_HEAD)"
+  rebase_merge="$(git rev-parse --git-path rebase-merge)"
+  rebase_apply="$(git rev-parse --git-path rebase-apply)"
+
+  if [ -f "$merge_head" ]; then
+    fail "Existe um merge em andamento. Finalize com 'git merge --continue' ou cancele com 'git merge --abort' antes de rodar o bizu-fix."
+  fi
+
+  if [ -d "$rebase_merge" ] || [ -d "$rebase_apply" ]; then
+    fail "Existe um rebase em andamento. Finalize com 'git rebase --continue' ou cancele com 'git rebase --abort' antes de rodar o bizu-fix."
+  fi
+
+  if [ -f "$cherry_pick_head" ]; then
+    fail "Existe um cherry-pick em andamento. Finalize com 'git cherry-pick --continue' ou cancele com 'git cherry-pick --abort' antes de rodar o bizu-fix."
+  fi
+
+  if [ -f "$revert_head" ]; then
+    fail "Existe um revert em andamento. Finalize com 'git revert --continue' ou cancele com 'git revert --abort' antes de rodar o bizu-fix."
+  fi
+}
+
+cleanup_old_backups() {
+  local now
+  local retention_seconds
+  local current_branch
+  local local_branch
+  local backup_date
+  local backup_time
+  local formatted_date
+  local backup_epoch
+  local age_seconds
+  local cleanup_confirm
+  local backup_branch
+  local old_backups=()
+
+  now="$(date +%s)"
+  retention_seconds=$((BACKUP_RETENTION_DAYS * SECONDS_PER_DAY))
+  current_branch="$(git rev-parse --abbrev-ref HEAD)"
+
+  while IFS= read -r local_branch; do
+    if [[ "$local_branch" =~ _back_([0-9]{8})_([0-9]{6})$ ]]; then
+      if [ "$local_branch" = "$current_branch" ]; then
+        continue
+      fi
+
+      backup_date="${BASH_REMATCH[1]}"
+      backup_time="${BASH_REMATCH[2]}"
+      formatted_date="${backup_date:0:4}-${backup_date:4:2}-${backup_date:6:2} ${backup_time:0:2}:${backup_time:2:2}:${backup_time:4:2}"
+
+      if backup_epoch="$(date -d "$formatted_date" +%s 2>/dev/null)"; then
+        age_seconds=$((now - backup_epoch))
+
+        if [ "$age_seconds" -gt "$retention_seconds" ]; then
+          old_backups+=("$local_branch")
+        fi
+      fi
+    fi
+  done < <(git for-each-ref --format='%(refname:short)' refs/heads)
+
+  if [ "${#old_backups[@]}" -eq 0 ]; then
+    return
+  fi
+
+  echo ""
+  echo "[info] Foram encontrados backups com mais de ${BACKUP_RETENTION_DAYS} dias:"
+  echo ""
+
+  for backup_branch in "${old_backups[@]}"; do
+    echo "$backup_branch"
+  done
+
+  echo ""
+  echo "Essas branches sao backups locais criados pelo bizu-fix."
+  echo "Elas nao sao usadas no PR e normalmente servem apenas para recuperacao."
+  echo ""
+  echo "Para remover esses backups, digite DELETE."
+  printf "Para manter, pressione Enter: "
+  read -r cleanup_confirm
+
+  if [ "$cleanup_confirm" != "DELETE" ]; then
+    echo "[info] Backups antigos mantidos."
+    echo ""
+    return
+  fi
+
+  echo ""
+  echo "[info] Removendo backups antigos..."
+
+  for backup_branch in "${old_backups[@]}"; do
+    if [ "$backup_branch" = "$current_branch" ]; then
+      echo "[info] Ignorado por ser a branch atual: $backup_branch"
+      continue
+    fi
+
+    if git branch -D "$backup_branch"; then
+      echo "[info] Removido: $backup_branch"
+    else
+      echo "[info] Nao foi possivel remover: $backup_branch"
+    fi
+  done
+
+  echo "[ok] Limpeza concluida."
+  echo ""
+}
+
+branch="${1:-}"
+
+if [ -z "$branch" ]; then
+  usage
+  fail "Informe o nome completo da branch."
+fi
+
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+  fail "Este diretorio nao esta dentro de um repositorio Git."
+}
+
+repo_root="$(git rev-parse --show-toplevel)"
+repo_name="$(basename "$repo_root")"
+
+ensure_no_git_operation_in_progress
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  fail "Existem alteracoes locais nao commitadas. Faca commit, stash ou descarte antes de continuar."
+fi
+
+story_id="${branch##*-}"
+
+if ! [[ "$story_id" =~ ^[0-9]+$ ]]; then
+  usage
+  fail "A branch precisa terminar com o numero da story. Ex: gweb-saas-fix-5901."
+fi
+
+base_branch="${branch%-${story_id}}"
+
+case "$repo_name" in
+  gweb)
+    [[ "$base_branch" == gweb-* ]] || {
+      fail "Branch invalida para gweb. Ela deve comecar com 'gweb-' e terminar com '-${story_id}'."
+    }
+    ;;
+  webtrans)
+    [[ "$base_branch" == webtrans-* ]] || {
+      fail "Branch invalida para webtrans. Ela deve comecar com 'webtrans-' e terminar com '-${story_id}'."
+    }
+    ;;
+  gw-base-webtrans)
+    [[ "$base_branch" == "master" ]] || {
+      fail "Branch invalida para gw-base-webtrans. Use o padrao master-${story_id}."
+    }
+    ;;
+  gw-lib)
+    [[ "$base_branch" == gw-lib-* ]] || {
+      fail "Branch invalida para gw-lib. Ela deve comecar com 'gw-lib-' e terminar com '-${story_id}'."
+    }
+    ;;
+  *)
+    fail "Repositorio nao configurado: $repo_name. Projetos aceitos: gweb, webtrans, gw-base-webtrans, gw-lib."
+    ;;
+esac
+
+echo "[info] Repositorio detectado: $repo_name"
+echo "[info] Branch de trabalho: $branch"
+echo "[info] Branch base detectada: $base_branch"
+echo "[info] Story detectada: $story_id"
+
+git show-ref --verify --quiet "refs/heads/$branch" || {
+  fail "A branch '$branch' nao existe localmente."
+}
+
+cleanup_old_backups
+
+backup="${branch}_back_$(date +%Y%m%d_%H%M%S)"
+
+echo ""
+echo "[atencao] Esta operacao vai:"
+echo "- criar backup da branch atual: $backup"
+echo "- atualizar a base local com origin/$base_branch"
+echo "- resetar $branch para a base $base_branch"
+echo "- reaplicar commits da story ($story_id) encontrados no backup"
+echo ""
+printf "Para confirmar, digite o nome da branch: "
+read -r branch_confirm
+
+if [ "$branch_confirm" != "$branch" ]; then
+  fail "Confirmacao invalida. Operacao cancelada."
+fi
+
+echo "[info] Indo para $branch"
+git checkout "$branch"
+
+current_branch="$(git rev-parse --abbrev-ref HEAD)"
+if [ "$current_branch" != "$branch" ]; then
+  fail "Falha ao trocar para a branch $branch."
+fi
+
+echo "[info] Criando backup: $backup"
+git branch "$backup"
+
+echo "[info] Buscando base no origin: $base_branch"
+git fetch origin "$base_branch"
+
+git show-ref --verify --quiet "refs/remotes/origin/$base_branch" || {
+  fail "A branch origin/$base_branch nao foi encontrada."
+}
+
+echo "[info] Atualizando base local: $base_branch"
+if git show-ref --verify --quiet "refs/heads/$base_branch"; then
+  git checkout "$base_branch"
+else
+  git checkout -b "$base_branch" "origin/$base_branch"
+fi
+
+git reset --hard "origin/$base_branch"
+
+echo "[info] Voltando para $branch"
+git checkout "$branch"
+
+echo "[info] Limpando branch com base em $base_branch"
+git reset --hard "$base_branch"
+
+echo "[info] Buscando commits da story ($story_id) no backup"
+commits="$(git log "$backup" --grep="^($story_id)" --reverse --pretty=format:"%H")"
+
+if [ -z "$commits" ]; then
+  echo ""
+  echo "[erro] Nenhum commit encontrado com o padrao ($story_id)."
+  echo "[info] Backup preservado: $backup"
+  echo ""
+  exit 1
+fi
+
+echo ""
+echo "[info] Commits encontrados:"
+git log "$backup" --grep="^($story_id)" --reverse --oneline
+
+echo ""
+printf "Deseja aplicar TODOS esses commits? (y/n): "
+read -r confirm
+
+if [ "$confirm" != "y" ]; then
+  echo ""
+  echo "[info] Cancelado."
+  echo "[info] Backup preservado: $backup"
+  echo ""
+  exit 1
+fi
+
+echo ""
+echo "[info] Aplicando commits..."
+
+for commit in $commits; do
+  echo "[info] Aplicando $commit"
+  git cherry-pick "$commit" || {
+    found_conflict_commit="false"
+    pending_count=0
+
+    echo ""
+    echo "[erro] Conflito detectado ao aplicar:"
+    git log -1 --oneline "$commit"
+    echo ""
+    echo "[info] O processo automatico foi interrompido."
+    echo ""
+    echo "[info] Para resolver manualmente:"
+    echo "1. Rode: git status"
+    echo "2. Resolva os conflitos nos arquivos"
+    echo "3. Rode: git add <arquivos-resolvidos>"
+    echo "4. Rode: git cherry-pick --continue"
+    echo ""
+    echo "[info] Se quiser cancelar este cherry-pick:"
+    echo "git cherry-pick --abort"
+    echo ""
+    echo "[info] Backup preservado: $backup"
+
+    for pending_commit in $commits; do
+      if [ "$pending_commit" = "$commit" ]; then
+        found_conflict_commit="true"
+        continue
+      fi
+
+      if [ "$found_conflict_commit" = "true" ]; then
+        if [ "$pending_count" -eq 0 ]; then
+          echo ""
+          echo "[info] Depois de resolver o conflito, ainda faltam estes commits:"
+        fi
+
+        git log -1 --oneline "$pending_commit"
+        echo "      git cherry-pick $pending_commit"
+        pending_count=$((pending_count + 1))
+      fi
+    done
+
+    if [ "$pending_count" -eq 0 ]; then
+      echo ""
+      echo "[info] Nao ha commits pendentes depois deste."
+    fi
+
+    echo ""
+    exit 1
+  }
+done
+
+echo ""
+echo "[info] Resultado final:"
+git log --oneline --decorate -5
+
+echo ""
+echo "[ok] Finalizado."
+echo "[info] Backup criado: $backup"
+echo "[info] Revise a branch e depois rode:"
+echo "git push origin $branch --force-with-lease"
