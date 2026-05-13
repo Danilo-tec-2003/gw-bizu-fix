@@ -14,18 +14,97 @@ Exemplo:
 git bizu-fix gweb-saas-fix-5901
 ```
 
-O script:
+## Instalacao
 
-1. valida o projeto e o nome da branch;
-2. identifica o numero da story pelo numero final da branch;
-3. identifica a branch base removendo o numero final;
-4. verifica se existem backups locais antigos para limpeza assistida;
-5. cria uma branch de backup;
-6. atualiza a base local a partir do `origin`;
-7. reseta a branch da story para a base atualizada;
-8. busca no backup os commits que comecam com `(numero-da-story)`;
-9. reaplica esses commits com `git cherry-pick`;
-10. orienta o push final com `--force-with-lease`.
+Clone este repositorio:
+
+```bash
+git clone https://github.com/Danilo-tec-2003/git-bizu-fix.git
+```
+
+Garanta permissao de execucao:
+
+```bash
+chmod +x ~/gw-dev-tools/git-bizu-fix
+```
+
+Crie uma pasta local para comandos, caso ainda nao exista:
+
+```bash
+mkdir -p ~/bin
+```
+
+Crie o link do comando:
+
+```bash
+ln -sf ~/gw-dev-tools/git-bizu-fix ~/bin/git-bizu-fix
+```
+
+Garanta que `~/bin` esteja no `PATH`.
+
+Bash:
+
+```bash
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Zsh:
+
+```bash
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Valide:
+
+```bash
+git bizu-fix
+```
+
+Se estiver instalado corretamente, o comando deve mostrar a mensagem de uso.
+
+## Como usar
+
+Entre no repositorio do projeto:
+
+```bash
+cd ~/Projetos/gweb
+```
+
+Garanta que a branch da story existe localmente:
+
+```bash
+git branch --list gweb-saas-fix-5901
+```
+
+Execute:
+
+```bash
+git bizu-fix gweb-saas-fix-5901
+```
+
+O script vai mostrar o projeto, a branch de trabalho, a branch base detectada e o numero da story.
+
+Antes de alterar a branch, ele pede confirmacao digitando o nome completo da branch:
+
+```text
+Para confirmar, digite o nome da branch:
+```
+
+Exemplo:
+
+```text
+gweb-saas-fix-5901
+```
+
+Ao final, revise a branch e envie para o remoto:
+
+```bash
+git push origin gweb-saas-fix-5901 --force-with-lease
+```
+
+A branch que deve ir para o PR e sempre a branch original da story, nao a branch de backup.
 
 ## Projetos suportados
 
@@ -46,9 +125,9 @@ git bizu-fix master-5901
 git bizu-fix gw-lib-fix-5901
 ```
 
-## Regras importantes
+## Regra dos commits
 
-Os commits da story precisam comecar com o numero entre parenteses:
+Os commits da story precisam comecar com o numero da story entre parenteses:
 
 ```text
 (5901)fix: ajusta validacao de frete
@@ -60,29 +139,24 @@ O script so reaplica commits encontrados no backup com esse padrao:
 ^(5901)
 ```
 
-## Seguranca
+## O que o script faz
 
-Antes de alterar a branch, o script bloqueia a execucao se existir:
+1. Valida o projeto e o nome da branch.
+2. Identifica o numero da story pelo final da branch.
+3. Detecta a branch base removendo o numero final.
+4. Bloqueia execucao se houver merge, rebase, cherry-pick ou revert em andamento.
+5. Bloqueia execucao se houver alteracoes locais nao commitadas.
+6. Verifica backups antigos e oferece limpeza assistida.
+7. Pede confirmacao digitando o nome da branch.
+8. Cria uma branch local de backup.
+9. Atualiza a base local a partir do `origin`.
+10. Reseta a branch da story para a base atualizada.
+11. Reaplica os commits da story com `git cherry-pick`.
+12. Orienta o push final com `--force-with-lease`.
 
-- alteracao local nao commitada;
-- merge em andamento;
-- rebase em andamento;
-- cherry-pick em andamento;
-- revert em andamento.
+## Branch de backup
 
-Antes de continuar, o script tambem exige que o dev digite o nome completo da branch.
-
-Exemplo:
-
-```text
-Para confirmar, digite o nome da branch: gweb-saas-fix-5901
-```
-
-Isso reduz o risco de resetar a branch errada por acidente.
-
-## Limpeza de backups
-
-O `bizu-fix` cria branches locais de backup antes de resetar a branch original.
+Antes de resetar a branch original, o script cria uma branch local de backup.
 
 Exemplo:
 
@@ -90,25 +164,29 @@ Exemplo:
 gweb-saas-fix-5901_back_20260513_103000
 ```
 
-Essas branches sao usadas apenas como seguranca em caso de falha ou recuperacao. A branch que deve ir para o PR continua sendo a branch original, por exemplo:
+Essa branch serve apenas para recuperacao local em caso de erro, falha ou necessidade de consulta.
+
+A branch que deve ir para o PR continua sendo:
 
 ```text
 gweb-saas-fix-5901
 ```
 
+O script nao envia a branch de backup para o remoto.
+
+## Limpeza de backups
+
 Para evitar acumulo, o script verifica backups locais com mais de 30 dias a cada execucao.
 
-Quando encontrar backups antigos, mostra uma lista:
+Ele remove apenas branches locais no padrao:
 
 ```text
-[info] Foram encontrados backups com mais de 30 dias:
+*_back_YYYYMMDD_HHMMSS
+```
 
-gweb-saas-fix-5600_back_20260401_091500
-gweb-saas-elastic-5702_back_20260405_143000
+Quando encontrar backups antigos, mostra a lista e pergunta:
 
-Essas branches sao backups locais criados pelo bizu-fix.
-Elas nao sao usadas no PR e normalmente servem apenas para recuperacao.
-
+```text
 Para remover esses backups, digite DELETE.
 Para manter, pressione Enter:
 ```
@@ -121,19 +199,11 @@ DELETE
 
 Se pressionar Enter ou digitar qualquer outra coisa, os backups sao mantidos.
 
-A limpeza remove somente branches locais que seguem o padrao:
-
-```text
-*_back_YYYYMMDD_HHMMSS
-```
-
-O script nunca tenta remover a branch atual durante essa limpeza.
-
 ## Conflitos
 
 Se algum `cherry-pick` gerar conflito, o script para imediatamente e deixa a resolucao para o dev.
 
-O dev deve:
+Fluxo recomendado:
 
 ```bash
 git status
@@ -148,38 +218,19 @@ Se quiser cancelar o cherry-pick em conflito:
 git cherry-pick --abort
 ```
 
-Quando houver commits restantes depois do commit que conflitou, o script mostra quais ainda faltam e imprime os comandos para aplicar manualmente.
+Se existirem commits pendentes depois do conflito, o script mostra quais ainda faltam e imprime os comandos para aplicar manualmente.
 
-## Instalacao local para teste
+## Situacoes bloqueadas
 
-Durante a fase de teste, rode o script diretamente:
+O script nao executa se encontrar:
 
-```bash
-./gw-dev-tools/git-bizu-fix gweb-saas-fix-5901
-```
+- alteracoes locais nao commitadas;
+- merge em andamento;
+- rebase em andamento;
+- cherry-pick em andamento;
+- revert em andamento;
+- branch fora do padrao do projeto;
+- repositorio nao suportado.
 
-Para testar no formato de subcomando Git, adicione a pasta ao `PATH` ou copie/symlink o arquivo para uma pasta que ja esteja no `PATH`.
+Resolva a situacao indicada e execute novamente.
 
-Exemplo:
-
-```bash
-mkdir -p ~/bin
-ln -s /caminho/para/gw-dev-tools/git-bizu-fix ~/bin/git-bizu-fix
-```
-
-Depois disso:
-
-```bash
-git bizu-fix gweb-saas-fix-5901
-```
-
-## Validacao tecnica
-
-Antes de publicar alteracoes no script, rode:
-
-```bash
-bash -n git-bizu-fix
-shellcheck git-bizu-fix
-```
-
-`bash -n` valida a sintaxe. `shellcheck` faz uma analise estatica mais completa e aponta problemas comuns em scripts Shell.
