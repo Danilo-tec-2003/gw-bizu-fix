@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+fail() {
+  echo ""
+  echo "[erro] $1"
+  echo ""
+  exit 1
+}
+
+message_file="${1:-}"
+
+if [ -z "$message_file" ] || [ ! -f "$message_file" ]; then
+  fail "Arquivo da mensagem de commit nao informado."
+fi
+
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+  fail "Este diretorio nao esta dentro de um repositorio Git."
+}
+
+repo_root="$(git rev-parse --show-toplevel)"
+repo_name="$(basename "$repo_root")"
+branch="$(git symbolic-ref --quiet --short HEAD || true)"
+
+if [ -z "$branch" ]; then
+  exit 0
+fi
+
+story_id="${branch##*-}"
+
+if ! [[ "$story_id" =~ ^[0-9]+$ ]]; then
+  exit 0
+fi
+
+base_branch="${branch%-${story_id}}"
+
+case "$repo_name" in
+  gweb)
+    [[ "$base_branch" == gweb-* ]] || {
+      fail "Branch invalida para gweb. Use o padrao gweb-alguma-coisa-${story_id}."
+    }
+    ;;
+  webtrans)
+    [[ "$base_branch" == webtrans-* ]] || {
+      fail "Branch invalida para webtrans. Use o padrao webtrans-alguma-coisa-${story_id}."
+    }
+    ;;
+  gw-base-webtrans)
+    [[ "$base_branch" == "master" ]] || {
+      fail "Branch invalida para gw-base-webtrans. Use o padrao master-${story_id}."
+    }
+    ;;
+  gw-lib)
+    [[ "$base_branch" == gw-lib-* ]] || {
+      fail "Branch invalida para gw-lib. Use o padrao gw-lib-alguma-coisa-${story_id}."
+    }
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+
+commit_subject="$(sed -n '/^[[:space:]]*#/d; /^[[:space:]]*$/d; p; q' "$message_file")"
+
+if [[ "$commit_subject" =~ ^Merge[[:space:]] ]]; then
+  exit 0
+fi
+
+if [[ "$commit_subject" =~ ^Revert[[:space:]] ]]; then
+  exit 0
+fi
+
+if [[ "$commit_subject" =~ ^\(${story_id}\) ]]; then
+  exit 0
+fi
+
+cat <<EOF
+
+[erro] Mensagem de commit fora do padrao.
+
+Branch atual:
+  $branch
+
+Padrao esperado:
+  (${story_id})descricao do commit
+
+Exemplo:
+  (${story_id})fix: ajusta validacao de frete
+
+Mensagem informada:
+  $commit_subject
+
+EOF
+
+exit 1

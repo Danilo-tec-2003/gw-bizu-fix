@@ -53,10 +53,10 @@ Entre na pasta criada:
 cd ~/Documentos/Projetos/gw-bizu-fix
 ```
 
-### 2. De permissao de execucao ao script
+### 2. De permissao de execucao aos scripts
 
 ```bash
-chmod +x git-bizu-fix
+chmod +x git-bizu-fix git-bizu-commit-msg
 ```
 
 ### 3. Crie a pasta local de comandos
@@ -69,6 +69,7 @@ mkdir -p ~/bin
 
 ```bash
 ln -sf ~/Documentos/Projetos/gw-bizu-fix/git-bizu-fix ~/bin/git-bizu-fix
+ln -sf ~/Documentos/Projetos/gw-bizu-fix/git-bizu-commit-msg ~/bin/git-bizu-commit-msg
 ```
 
 Esse link permite chamar o script como um comando Git:
@@ -119,6 +120,38 @@ Uso:
 Exemplo de instalacao validada:
 
 ![Instalacao do git bizu-fix](docs/images/sigaGit.png)
+
+### 7. Instale o validador de commits no projeto
+
+Para bloquear commits fora do padrao, instale o hook dentro de cada repositorio GW em que voce usa o fluxo.
+
+Exemplo para o `webtrans`:
+
+```bash
+cd ~/Documentos/Projetos/webtrans
+git bizu-fix install-hook
+```
+
+Exemplo para o `gweb`:
+
+```bash
+cd ~/Documentos/Projetos/gweb
+git bizu-fix install-hook
+```
+
+Depois disso, o Git passa a validar a mensagem em todo `git commit` feito naquele repositorio.
+
+Exemplo bloqueado na branch `webtrans-saas-elastic-2045`:
+
+```bash
+git commit -m "testando"
+```
+
+Exemplo aceito:
+
+```bash
+git commit -m "(2045)fix: ajusta validacao"
+```
 
 ## Como usar
 
@@ -238,6 +271,8 @@ ele reaplica somente commits que comecam com:
 
 Se nenhum commit seguir esse padrao, o script nao consegue identificar o que deve ser reaplicado.
 
+Quando o hook estiver instalado com `git bizu-fix install-hook`, o proprio `git commit` bloqueia mensagens fora desse padrao.
+
 ## O que o script faz
 
 1. Valida se o diretorio atual esta dentro de um repositorio Git.
@@ -354,6 +389,28 @@ echo $PATH
 ```
 
 Depois rode novamente o passo de configuracao do shell, conforme Bash ou Zsh.
+
+### `git bizu-fix` funciona, mas o commit fora do padrao ainda passa
+
+O validador de commit provavelmente ainda nao foi instalado no repositorio atual.
+
+Entre no repositorio do projeto e rode:
+
+```bash
+git bizu-fix install-hook
+```
+
+Depois confira se o hook existe:
+
+```bash
+ls -l .git/hooks/commit-msg
+```
+
+Se o repositorio usar `core.hooksPath`, confira o caminho configurado:
+
+```bash
+git config --get core.hooksPath
+```
 
 ### `[erro] Informe o nome completo da branch.`
 

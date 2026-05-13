@@ -4,6 +4,8 @@ set -euo pipefail
 
 BACKUP_RETENTION_DAYS=30
 SECONDS_PER_DAY=86400
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || realpath "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 
 fail() {
   echo ""
@@ -15,6 +17,7 @@ fail() {
 usage() {
   echo "Uso:"
   echo "  git bizu-fix <branch>"
+  echo "  git bizu-fix install-hook"
   echo ""
   echo "Exemplos:"
   echo "  git bizu-fix gweb-saas-fix-5901"
@@ -22,6 +25,57 @@ usage() {
   echo "  git bizu-fix webtrans-saas-fix-5901"
   echo "  git bizu-fix master-5901"
   echo "  git bizu-fix gw-lib-fix-5901"
+  echo ""
+  echo "Instalar validador de mensagem de commit no repositorio atual:"
+  echo "  git bizu-fix install-hook"
+}
+
+install_commit_msg_hook() {
+  local repo_root
+  local hook_path
+  local hook_dir
+  local validator_path
+
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+    fail "Este diretorio nao esta dentro de um repositorio Git."
+  }
+
+  repo_root="$(git rev-parse --show-toplevel)"
+  hook_path="$(git rev-parse --git-path hooks/commit-msg)"
+  hook_dir="$(dirname "$hook_path")"
+  validator_path="$(command -v git-bizu-commit-msg || true)"
+
+  if [ -z "$validator_path" ] && [ -x "$SCRIPT_DIR/git-bizu-commit-msg" ]; then
+    validator_path="$SCRIPT_DIR/git-bizu-commit-msg"
+  fi
+
+  if [ -z "$validator_path" ]; then
+    fail "Validador git-bizu-commit-msg nao encontrado. Reinstale o GW Dev Tools e crie o link em ~/bin."
+  fi
+
+  if [ -f "$hook_path" ] && ! grep -q "bizu-fix commit-msg hook" "$hook_path"; then
+    fail "Ja existe um hook commit-msg em $hook_path. Revise esse arquivo antes de instalar o hook do bizu-fix."
+  fi
+
+  mkdir -p "$hook_dir"
+
+  cat > "$hook_path" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+# bizu-fix commit-msg hook
+exec "$validator_path" "\$1"
+EOF
+
+  chmod +x "$hook_path"
+
+  echo "[ok] Validador de commit instalado em:"
+  echo "$hook_path"
+  echo ""
+  echo "[info] Repositorio:"
+  echo "$repo_root"
+  echo ""
+  echo "[info] A partir de agora, commits em branches de story precisam comecar com o numero entre parenteses."
 }
 
 ensure_no_git_operation_in_progress() {
@@ -133,6 +187,11 @@ cleanup_old_backups() {
 }
 
 branch="${1:-}"
+
+if [ "$branch" = "install-hook" ]; then
+  install_commit_msg_hook
+  exit 0
+fi
 
 if [ -z "$branch" ]; then
   usage
